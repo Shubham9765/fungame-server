@@ -1,0 +1,385 @@
+{
+  "systemSettings": {
+    "defaultStartingPoints": 5000,
+    "allowPlayerTransfers": true,
+    "minTransferAmount": 10,
+    "maxTransferAmount": 1000000
+  },
+  "users": {
+    "guest_001": {
+      "playerKey": "guest_001",
+      "username": "Guest_001",
+      "points": 0,
+      "totalBet": 0,
+      "totalWon": 0,
+      "createdAt": "2026-10-13T12:00:00.000Z"
+    },
+    "player_poker": {
+      "playerKey": "player_poker",
+      "username": "PokerMaster",
+      "points": 25000,
+      "totalBet": 0,
+      "totalWon": 0,
+      "createdAt": "2026-10-13T12:00:00.000Z"
+    },
+    "player_teenpatti": {
+      "playerKey": "player_teenpatti",
+      "username": "LuckyPlayer",
+      "points": 17000,
+      "totalBet": 0,
+      "totalWon": 0,
+      "createdAt": "2026-10-13T12:00:00.000Z"
+    },
+    "player_vip": {
+      "playerKey": "player_vip",
+      "username": "VIP Member",
+      "password": "secret777",
+      "points": 12000,
+      "totalBet": 3000,
+      "totalWon": 0,
+      "status": "active",
+      "createdAt": "2026-10-13T12:37:43.312Z"
+    }
+  },
+  "transactions": [
+    {
+      "id": "tx_1791895074949",
+      "type": "admin_recall",
+      "sender": "player_vip",
+      "receiver": "ADMIN_VAULT",
+      "amount": 5000,
+      "balanceAfter": 15000,
+      "timestamp": "2026-10-13T12:37:54.949Z",
+      "note": "Admin recalled 5000 points back to vault"
+    },
+    {
+      "id": "tx_1791895063314",
+      "type": "account_created",
+      "sender": "ADMIN",
+      "receiver": "player_vip",
+      "amount": 20000,
+      "balanceAfter": 20000,
+      "timestamp": "2026-10-13T12:37:43.314Z",
+      "note": "Account creation with initial points"
+    },
+    {
+      "id": "tx_1791894803248_456",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 0,
+      "timestamp": "2026-10-13T12:33:23.248Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894803076_669",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 0,
+      "timestamp": "2026-10-13T12:33:23.076Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894802948_47",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 0,
+      "timestamp": "2026-10-13T12:33:22.948Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894802789_706",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 1000,
+      "timestamp": "2026-10-13T12:33:22.789Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894802644_115",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 2000,
+      "timestamp": "2026-10-13T12:33:22.644Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894802301_9",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 3000,
+      "timestamp": "2026-10-13T12:33:22.301Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894802135_5",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 4000,
+      "timestamp": "2026-10-13T12:33:22.135Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894801970_769",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 5000,
+      "timestamp": "2026-10-13T12:33:21.970Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894801449_954",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 6000,
+      "timestamp": "2026-10-13T12:33:21.449Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894801248_862",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 7000,
+      "timestamp": "2026-10-13T12:33:21.248Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894801076_992",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 8000,
+      "timestamp": "2026-10-13T12:33:21.076Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894800878_724",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 9000,
+      "timestamp": "2026-10-13T12:33:20.878Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894800699_195",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 10000,
+      "timestamp": "2026-10-13T12:33:20.699Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894800525_163",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 11000,
+      "timestamp": "2026-10-13T12:33:20.525Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894800358_9",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 12000,
+      "timestamp": "2026-10-13T12:33:20.358Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894800192_656",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 13000,
+      "timestamp": "2026-10-13T12:33:20.192Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894800046_153",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 14000,
+      "timestamp": "2026-10-13T12:33:20.046Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894799907_59",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 15000,
+      "timestamp": "2026-10-13T12:33:19.907Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894799762_377",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 16000,
+      "timestamp": "2026-10-13T12:33:19.762Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894799371_522",
+      "type": "debit",
+      "sender": "guest_001",
+      "receiver": "SYSTEM",
+      "amount": 1000,
+      "balanceAfter": 17000,
+      "timestamp": "2026-10-13T12:33:19.371Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791894794497_779",
+      "type": "credit",
+      "sender": "SYSTEM",
+      "receiver": "guest_001",
+      "amount": 5000,
+      "balanceAfter": 18000,
+      "timestamp": "2026-10-13T12:33:14.497Z",
+      "note": "Admin Adjustment"
+    },
+    {
+      "id": "tx_1791893475308_300",
+      "type": "transfer",
+      "sender": "guest_001",
+      "receiver": "player_teenpatti",
+      "amount": 2000,
+      "balanceAfterSender": 13000,
+      "balanceAfterReceiver": 17000,
+      "timestamp": "2026-10-13T12:11:15.308Z",
+      "note": "P2P Transfer Test"
+    },
+    {
+      "id": "tx_1791893467233_880",
+      "type": "credit",
+      "sender": "SYSTEM",
+      "receiver": "guest_001",
+      "amount": 5000,
+      "balanceAfter": 15000,
+      "timestamp": "2026-10-13T12:11:07.233Z",
+      "note": "Test Credit"
+    },
+    {
+      "id": "tx_init_1",
+      "type": "admin_credit",
+      "sender": "SYSTEM",
+      "receiver": "guest_001",
+      "amount": 10000,
+      "balanceAfter": 10000,
+      "timestamp": "2026-10-13T12:00:00.000Z",
+      "note": "Initial wallet balance"
+    }
+  ],
+  "gameResults": {
+    "aviator": {
+      "roundId": 122,
+      "phase": "waiting",
+      "multiplier": "7.13",
+      "nextCrashMultiplier": null,
+      "countdown": 3,
+      "actualCrash": "7.13"
+    },
+    "funTarget": {
+      "roundId": 209,
+      "nextWinningNumber": null,
+      "lastResult": 7,
+      "countdown": 11
+    },
+    "funRoulette": {
+      "roundId": 312,
+      "nextWinningNumber": null,
+      "lastResult": 9,
+      "countdown": 36
+    },
+    "sevenUpDown": {
+      "roundId": 417,
+      "nextDiceTotal": null,
+      "lastResult": "7 Up (8)",
+      "countdown": 11
+    },
+    "tripleFun": {
+      "roundId": 501,
+      "nextWinningNumber": null,
+      "lastResult": 7,
+      "countdown": 45
+    }
+  },
+  "adminMasterPoints": 9985000,
+  "liveBets": {
+    "funTarget": {
+      "0": 0,
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 500,
+      "5": 0,
+      "6": 0,
+      "7": 2500,
+      "8": 0,
+      "9": 0,
+      "total": 3000
+    },
+    "funRoulette": {
+      "total": 0,
+      "pockets": {}
+    },
+    "sevenUpDown": {
+      "7down": 0,
+      "lucky7": 0,
+      "7up": 0,
+      "total": 0
+    },
+    "aviator": [],
+    "tripleFun": {
+      "slots": {
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 0,
+        "5": 0,
+        "6": 0,
+        "7": 0,
+        "8": 0,
+        "9": 0,
+        "10": 0,
+        "11": 0,
+        "12": 0
+      },
+      "total": 0
+    }
+  }
+}

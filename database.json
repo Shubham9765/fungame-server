@@ -12,7 +12,11 @@
       "points": 0,
       "totalBet": 0,
       "totalWon": 0,
-      "createdAt": "2026-10-13T12:00:00.000Z"
+      "createdAt": "2026-10-13T12:00:00.000Z",
+      "isOnline": true,
+      "lastSeen": "2026-10-13T17:56:27.796Z",
+      "lastSeenTimestamp": 1791914187796,
+      "lastIp": "127.0.0.1"
     },
     "player_poker": {
       "playerKey": "player_poker",
@@ -306,36 +310,36 @@
   ],
   "gameResults": {
     "aviator": {
-      "roundId": 122,
-      "phase": "waiting",
-      "multiplier": "7.13",
+      "roundId": 123,
+      "phase": "running",
+      "multiplier": 2.36,
       "nextCrashMultiplier": null,
-      "countdown": 3,
-      "actualCrash": "7.13"
+      "countdown": 0,
+      "actualCrash": 3.89
     },
     "funTarget": {
-      "roundId": 209,
+      "roundId": 210,
       "nextWinningNumber": null,
-      "lastResult": 7,
-      "countdown": 11
+      "lastResult": 9,
+      "countdown": 34
     },
     "funRoulette": {
       "roundId": 312,
       "nextWinningNumber": null,
       "lastResult": 9,
-      "countdown": 36
+      "countdown": 19
     },
     "sevenUpDown": {
-      "roundId": 417,
+      "roundId": 418,
       "nextDiceTotal": null,
-      "lastResult": "7 Up (8)",
-      "countdown": 11
+      "lastResult": "7 Down (6)",
+      "countdown": 24
     },
     "tripleFun": {
       "roundId": 501,
       "nextWinningNumber": null,
       "lastResult": 7,
-      "countdown": 45
+      "countdown": 28
     }
   },
   "adminMasterPoints": 9985000,
@@ -345,13 +349,13 @@
       "1": 0,
       "2": 0,
       "3": 0,
-      "4": 500,
+      "4": 0,
       "5": 0,
       "6": 0,
-      "7": 2500,
+      "7": 0,
       "8": 0,
       "9": 0,
-      "total": 3000
+      "total": 0
     },
     "funRoulette": {
       "total": 0,

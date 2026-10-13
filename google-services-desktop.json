@@ -1,0 +1,12 @@
+﻿{
+    "client":  [
+
+               ],
+    "configuration_version":  "1",
+    "project_info":  {
+                         "firebase_url":  "https://127.0.0.1",
+                         "project_number":  "000000000000",
+                         "storage_bucket":  "disabled",
+                         "project_id":  "disabled"
+                     }
+}

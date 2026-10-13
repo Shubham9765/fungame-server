@@ -115,6 +115,10 @@ function createPlayerAccount(playerKey, username, password, initialPoints = 5000
     totalBet: 0,
     totalWon: 0,
     status: 'active',
+    isOnline: false,
+    lastSeen: null,
+    lastIp: null,
+    lastSeenTimestamp: 0,
     createdAt: new Date().toISOString()
   };
 
@@ -133,6 +137,25 @@ function createPlayerAccount(playerKey, username, password, initialPoints = 5000
   }
   saveDB(db);
   return { success: true, user: db.users[playerKey] };
+}
+
+// Helper: Track player active presence & client IP
+function markUserActive(user, req) {
+  if (!user) return;
+  const now = Date.now();
+  user.isOnline = true;
+  user.lastSeen = new Date().toISOString();
+  user.lastSeenTimestamp = now;
+  let clientIp = '127.0.0.1';
+  if (req && req.headers) {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded) {
+      clientIp = forwarded.split(',')[0].trim();
+    } else if (req.socket && req.socket.remoteAddress) {
+      clientIp = req.socket.remoteAddress;
+    }
+  }
+  user.lastIp = clientIp.replace(/^::ffff:/, '');
 }
 
 // Helper: Recall points from player back to Admin
@@ -219,6 +242,15 @@ function resetBets(game) {
 
 // --- GAME SIMULATOR & TIMERS ---
 setInterval(() => {
+  // Player presence idle check (mark offline after 45s of inactivity)
+  const now = Date.now();
+  for (const key in db.users) {
+    const u = db.users[key];
+    if (u.isOnline && (!u.lastSeenTimestamp || (now - u.lastSeenTimestamp > 45000))) {
+      u.isOnline = false;
+    }
+  }
+
   // 1. Aviator
   const av = db.gameResults.aviator;
   if (av.phase === 'waiting') {
@@ -331,6 +363,7 @@ const server = http.createServer((req, res) => {
         liveBets: db.liveBets,
         stats: {
           totalUsers: Object.keys(db.users).length,
+          onlineUsers: Object.values(db.users).filter(u => u.isOnline).length,
           totalPointsInCirculation: Object.values(db.users).reduce((sum, u) => sum + (u.points || 0), 0),
           totalTransactions: db.transactions.length
         }
@@ -383,6 +416,7 @@ const server = http.createServer((req, res) => {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify({ status: 'error', message: 'Insufficient points' }));
       }
+      markUserActive(user, req);
       user.points -= betAmt;
       user.totalBet = (user.totalBet || 0) + betAmt;
 
@@ -436,6 +470,9 @@ const server = http.createServer((req, res) => {
         return res.end(JSON.stringify({ status: 'error', message: 'Invalid password' }));
       }
 
+      markUserActive(user, req);
+      saveDB(db);
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({
         status: 'success',
@@ -452,6 +489,7 @@ const server = http.createServer((req, res) => {
     if (pathname.toLowerCase().includes('balance')) {
       const pKey = (jsonBody.playerKey || jsonBody.userId || url.searchParams.get('playerKey') || 'guest_001').toLowerCase();
       const user = db.users[pKey] || createPlayerAccount(pKey, pKey, '123456', 5000).user;
+      markUserActive(user, req);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({
         status: 'success',
@@ -466,12 +504,23 @@ const server = http.createServer((req, res) => {
       const sender = (jsonBody.senderKey || jsonBody.fromUser || jsonBody.playerKey || '').toLowerCase();
       const receiver = (jsonBody.receiverKey || jsonBody.toUser || jsonBody.targetKey || '').toLowerCase();
       const amt = jsonBody.amount || jsonBody.points;
+      if (db.users[sender]) markUserActive(db.users[sender], req);
       const result = transferPoints(sender, receiver, amt, jsonBody.note || 'In-game Player Transfer');
       res.writeHead(result.success ? 200 : 400, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify(result));
     }
 
-    // 11. SIGNALR NEGOTIATE
+    // 11. HEARTBEAT / PING (Live player keepalive)
+    if (pathname === '/api/heartbeat' || pathname === '/ping') {
+      const pKey = (jsonBody.playerKey || url.searchParams.get('playerKey') || '').toLowerCase();
+      if (db.users[pKey]) {
+        markUserActive(db.users[pKey], req);
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ status: 'ok', online: true }));
+    }
+
+    // 12. SIGNALR NEGOTIATE
     if (pathname.includes('negotiate')) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({
@@ -480,11 +529,12 @@ const server = http.createServer((req, res) => {
       }));
     }
 
-    // 12. SOAP XML (Teen Patti / Poker)
+    // 13. SOAP XML (Teen Patti / Poker)
     if (body.includes('GetPlayerBalanceFromXML') || body.includes('GetPokerBalanceFromXml')) {
       const match = body.match(/<[^>]*playerKey[^>]*>([^<]+)<\//i) || body.match(/<[^>]*UserID[^>]*>([^<]+)<\//i);
       const pKey = (match ? match[1] : 'guest_001').toLowerCase();
       const user = db.users[pKey] || createPlayerAccount(pKey, pKey, '123456', 5000).user;
+      markUserActive(user, req);
       res.writeHead(200, { 'Content-Type': 'text/xml; charset=utf-8' });
       return res.end(`<?xml version="1.0" encoding="utf-8"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">
@@ -607,7 +657,10 @@ function serveAdminDashboard(res) {
     <div class="header">
       <div>
         <h1 style="margin:0;">🎮 FunGame Master Operations &amp; Live Multi-Game Betting</h1>
-        <div style="font-size: 13px; color: #8b949e; margin-top:4px;">Port: <strong>${PORT}</strong> | Master Vault: <strong style="color:var(--yellow);" id="valAdminVault">--</strong> pts</div>
+        <div style="font-size: 13px; color: #8b949e; margin-top:4px;">
+          Port: <strong>${PORT}</strong> | Master Vault: <strong style="color:var(--yellow);" id="valAdminVault">--</strong> pts | 
+          Players Online: <strong style="color:#3fb950; font-size:14px;" id="valOnlineCount">0</strong> / <span id="valTotalUsers">0</span>
+        </div>
       </div>
       <div>
         <span class="badge">● SERVER &amp; LIVE WEBSOCKETS ACTIVE</span>
@@ -791,12 +844,14 @@ function serveAdminDashboard(res) {
             <tr>
               <th>ID (Login)</th>
               <th>Password</th>
+              <th>Status</th>
+              <th>Device IP / Last Active</th>
               <th>Points</th>
               <th>Quick Actions</th>
             </tr>
           </thead>
           <tbody id="usersTable">
-            <tr><td colspan="4">Loading player database...</td></tr>
+            <tr><td colspan="6">Loading player database...</td></tr>
           </tbody>
         </table>
       </div>
@@ -999,15 +1054,28 @@ function serveAdminDashboard(res) {
         const fromSel = document.getElementById('transferFrom');
         const toSel = document.getElementById('transferTo');
 
+        document.getElementById('valOnlineCount').innerText = data.stats.onlineUsers || 0;
+        document.getElementById('valTotalUsers').innerText = data.stats.totalUsers || 0;
+
         tbody.innerHTML = '';
         fromSel.innerHTML = '<option value="ADMIN">ADMIN_VAULT (' + Number(data.adminVault).toLocaleString() + ' pts)</option>';
         toSel.innerHTML = '<option value="ADMIN">ADMIN_VAULT</option>';
 
         data.users.forEach(u => {
+          const isOnline = !!u.isOnline;
+          const statusBadge = isOnline 
+            ? '<span class="badge" style="background:#23863625; color:#3fb950; border-color:#23863650;">🟢 ONLINE</span>' 
+            : '<span class="badge" style="background:#30363d25; color:#8b949e; border-color:#30363d;">⚪ OFFLINE</span>';
+
+          const lastActiveStr = u.lastSeen ? new Date(u.lastSeen).toLocaleTimeString() : 'Never';
+          const ipStr = u.lastIp || 'N/A';
+
           tbody.innerHTML += \`
             <tr>
               <td><code>\${u.playerKey}</code></td>
               <td><code>\${u.password || '******'}</code></td>
+              <td>\${statusBadge}</td>
+              <td><code style="color:var(--yellow);">\${ipStr}</code><div style="font-size:11px; color:#8b949e;">\${lastActiveStr}</div></td>
               <td><strong style="color:var(--blue); font-size:15px;">\${Number(u.points).toLocaleString()}</strong> pts</td>
               <td>
                 <button class="btn" style="padding:2px 6px; font-size:11px;" onclick="quickCredit('\${u.playerKey}', 1000)">+1K</button>

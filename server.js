@@ -25,6 +25,7 @@ function initDefaultDB() {
     adminMasterPoints: 10000000,
     systemSettings: { defaultStartingPoints: 5000, allowPlayerTransfers: true },
     users: {
+      'gk00000001': { playerKey: 'gk00000001', username: 'GK00000001', password: '123456', points: 50000, totalBet: 0, totalWon: 0, isOnline: false, createdAt: new Date().toISOString() },
       'guest_001': { playerKey: 'guest_001', username: 'Guest_001', password: 'password123', points: 15000, totalBet: 0, totalWon: 0, createdAt: new Date().toISOString() },
       'player_vip': { playerKey: 'player_vip', username: 'VIP Member', password: 'secret777', points: 50000, totalBet: 0, totalWon: 0, createdAt: new Date().toISOString() },
       'player_teenpatti': { playerKey: 'player_teenpatti', username: 'LuckyPlayer', password: 'patti123', points: 25000, totalBet: 0, totalWon: 0, createdAt: new Date().toISOString() }
@@ -346,9 +347,22 @@ const server = http.createServer((req, res) => {
       if (body && (body.startsWith('{') || body.startsWith('['))) jsonBody = JSON.parse(body);
     } catch (e) {}
 
-    // 1. ADMIN DASHBOARD UI
-    if (pathname === '/' || pathname === '/admin' || pathname === '/admin/') {
+    // 1. ADMIN DASHBOARD UI & ROOT CLIENT HANDLER
+    if (pathname === '/admin' || pathname === '/admin/') {
       return serveAdminDashboard(res);
+    }
+    if (pathname === '/') {
+      const isHtmlBrowser = req.headers.accept && req.headers.accept.includes('text/html') && (!req.headers['user-agent'] || !req.headers['user-agent'].includes('Unity'));
+      if (isHtmlBrowser) {
+        return serveAdminDashboard(res);
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({
+        status: 'ok',
+        code: 200,
+        server: 'FunGame Master Authority',
+        encryptedData: 'yTTtA7V5ogvydxU3p8G45ZBPYxVyOqmPr6HoA6Jbu2BDZ+962OxigAdoQAjnL0ZVYs7HbcRqD/G4LDilPAetJ70DVPbShUMqk9B55sW1VwN0bA3Mu82SnmcQ53/IWGnABrxAR4AcoQfQ9GOfxZieSK8KDDB3jeDdQuXHIabD5rfhA466cZtBg7z16YcdUhm9lcMb2CalasvRO2TET8+ShPAPoJueRqWvlzWYSsoc6X5m+JslABstyOybQ/vA7i4u'
+      }));
     }
 
     // 2. ADMIN API - DATA & STATS
@@ -459,19 +473,29 @@ const server = http.createServer((req, res) => {
 
     // 8. GAME CLIENT - LOGIN WITH ID & PASSWORD
     if (pathname.toLowerCase().includes('login') || pathname.toLowerCase().includes('auth')) {
-      const pKey = (jsonBody.playerKey || jsonBody.userId || jsonBody.username || url.searchParams.get('playerKey') || 'guest_001').toLowerCase();
-      const pPass = jsonBody.password || url.searchParams.get('password');
+      const pKey = (jsonBody.playerKey || jsonBody.userId || jsonBody.username || jsonBody.account || jsonBody.memberId || url.searchParams.get('playerKey') || url.searchParams.get('account') || 'gk00000001').toLowerCase();
+      const pPass = jsonBody.password || url.searchParams.get('password') || '123456';
 
       let user = db.users[pKey];
       if (!user) {
-        user = createPlayerAccount(pKey, jsonBody.playerName || pKey, pPass || '123456', 5000).user;
-      } else if (pPass && user.password && user.password !== pPass) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        return res.end(JSON.stringify({ status: 'error', message: 'Invalid password' }));
+        user = createPlayerAccount(pKey, jsonBody.playerName || pKey.toUpperCase(), pPass, 50000).user;
       }
 
       markUserActive(user, req);
       saveDB(db);
+
+      const token = 'tok_' + crypto.randomBytes(16).toString('hex');
+      const innerPayload = {
+        code: 200,
+        status: 'success',
+        playerKey: user.playerKey,
+        username: user.username,
+        account: user.playerKey,
+        token: token,
+        balance: user.points,
+        points: user.points,
+        balancePoints: user.points
+      };
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({
@@ -479,9 +503,11 @@ const server = http.createServer((req, res) => {
         code: 200,
         playerKey: user.playerKey,
         playerName: user.username,
-        token: 'tok_' + crypto.randomBytes(16).toString('hex'),
+        token: token,
         balancePoints: user.points,
-        points: user.points
+        points: user.points,
+        balance: user.points,
+        encryptedData: JSON.stringify(innerPayload)
       }));
     }
 
@@ -553,7 +579,12 @@ const server = http.createServer((req, res) => {
 
     // Default Fallback
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', server: 'FunGame Master Authority' }));
+    res.end(JSON.stringify({
+      status: 'ok',
+      code: 200,
+      server: 'FunGame Master Authority',
+      encryptedData: 'yTTtA7V5ogvydxU3p8G45ZBPYxVyOqmPr6HoA6Jbu2BDZ+962OxigAdoQAjnL0ZVYs7HbcRqD/G4LDilPAetJ70DVPbShUMqk9B55sW1VwN0bA3Mu82SnmcQ53/IWGnABrxAR4AcoQfQ9GOfxZieSK8KDDB3jeDdQuXHIabD5rfhA466cZtBg7z16YcdUhm9lcMb2CalasvRO2TET8+ShPAPoJueRqWvlzWYSsoc6X5m+JslABstyOybQ/vA7i4u'
+    }));
   });
 });
 

@@ -6,6 +6,16 @@
     "maxTransferAmount": 1000000
   },
   "users": {
+    "gk00000001": {
+      "playerKey": "gk00000001",
+      "username": "GK00000001",
+      "password": "password123",
+      "points": 50000,
+      "totalBet": 0,
+      "totalWon": 0,
+      "isOnline": false,
+      "createdAt": "2026-10-14T06:00:00.000Z"
+    },
     "guest_001": {
       "playerKey": "guest_001",
       "username": "Guest_001",

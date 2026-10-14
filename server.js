@@ -438,6 +438,18 @@ const server = http.createServer((req, res) => {
       if (body && (body.startsWith('{') || body.startsWith('['))) jsonBody = JSON.parse(body);
     } catch (e) {}
 
+    // 0.0 DIRECT APK DOWNLOAD
+    if (pathname === '/download' || pathname === '/apk' || pathname === '/FunGame_VIP.apk') {
+      const apkPath = path.join(__dirname, 'public', 'FunGame_VIP.apk');
+      if (fs.existsSync(apkPath)) {
+        res.writeHead(200, {
+          'Content-Type': 'application/vnd.android.package-archive',
+          'Content-Disposition': 'attachment; filename="FunGame_VIP.apk"'
+        });
+        return res.end(fs.readFileSync(apkPath));
+      }
+    }
+
     // 0. GAME CLIENT (HTML5 LIVE CASINO: FUN TARGET & FUN ROULETTE)
     if (pathname === '/play' || pathname === '/game' || pathname === '/play/' || pathname === '/game/') {
       const clientHtmlPath = path.join(__dirname, 'public', 'index.html');

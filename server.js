@@ -357,9 +357,11 @@ const server = http.createServer((req, res) => {
         return serveAdminDashboard(res);
       }
       const addressBundle = JSON.stringify({
-        ApiServerUrl: 'funrepinternal.vip',
-        SocketUrl: 'funrepinternal.vip',
-        ResourceUrl: 'funrepinternal.vip'
+        ApiServerUrl: 'fungame-master.onrender.com',
+        SocketUrl: 'fungame-master.onrender.com',
+        ResourceUrl: 'fungame-master.onrender.com',
+        AviatorUrl: 'fungame-master.onrender.com',
+        DownloadUrl: 'fungame-master.onrender.com'
       });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({
@@ -368,9 +370,11 @@ const server = http.createServer((req, res) => {
         server: 'FunGame Master Authority',
         encryptedData: addressBundle,
         data: addressBundle,
-        ApiServerUrl: 'funrepinternal.vip',
-        SocketUrl: 'funrepinternal.vip',
-        ResourceUrl: 'funrepinternal.vip'
+        ApiServerUrl: 'fungame-master.onrender.com',
+        SocketUrl: 'fungame-master.onrender.com',
+        ResourceUrl: 'fungame-master.onrender.com',
+        AviatorUrl: 'fungame-master.onrender.com',
+        DownloadUrl: 'fungame-master.onrender.com'
       }));
     }
 
@@ -481,7 +485,7 @@ const server = http.createServer((req, res) => {
     }
 
     // 8. GAME CLIENT - LOGIN WITH ID & PASSWORD
-    if (pathname.toLowerCase().includes('login') || pathname.toLowerCase().includes('auth')) {
+    if (pathname.toLowerCase().includes('login') || pathname.toLowerCase().includes('auth') || pathname.toLowerCase().includes('checkforlogin')) {
       const pKey = (jsonBody.playerKey || jsonBody.userId || jsonBody.username || jsonBody.account || jsonBody.memberId || url.searchParams.get('playerKey') || url.searchParams.get('account') || 'gk00000001').toLowerCase();
       const pPass = jsonBody.password || url.searchParams.get('password') || '123456';
 
@@ -497,26 +501,36 @@ const server = http.createServer((req, res) => {
       const innerPayload = {
         code: 200,
         status: 'success',
+        isSuccess: true,
         playerKey: user.playerKey,
         username: user.username,
         account: user.playerKey,
         token: token,
         balance: user.points,
         points: user.points,
-        balancePoints: user.points
+        balancePoints: user.points,
+        data: {
+          token: token,
+          balance: user.points,
+          account: user.playerKey,
+          username: user.username
+        }
       };
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({
         status: 'success',
         code: 200,
+        isSuccess: true,
         playerKey: user.playerKey,
         playerName: user.username,
+        account: user.playerKey,
         token: token,
         balancePoints: user.points,
         points: user.points,
         balance: user.points,
-        encryptedData: JSON.stringify(innerPayload)
+        encryptedData: JSON.stringify(innerPayload),
+        data: JSON.stringify(innerPayload)
       }));
     }
 
@@ -588,9 +602,11 @@ const server = http.createServer((req, res) => {
 
     // Default Fallback
     const fallbackBundle = JSON.stringify({
-      ApiServerUrl: 'funrepinternal.vip',
-      SocketUrl: 'funrepinternal.vip',
-      ResourceUrl: 'funrepinternal.vip'
+      ApiServerUrl: 'fungame-master.onrender.com',
+      SocketUrl: 'fungame-master.onrender.com',
+      ResourceUrl: 'fungame-master.onrender.com',
+      AviatorUrl: 'fungame-master.onrender.com',
+      DownloadUrl: 'fungame-master.onrender.com'
     });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
@@ -599,9 +615,11 @@ const server = http.createServer((req, res) => {
       server: 'FunGame Master Authority',
       encryptedData: fallbackBundle,
       data: fallbackBundle,
-      ApiServerUrl: 'funrepinternal.vip',
-      SocketUrl: 'funrepinternal.vip',
-      ResourceUrl: 'funrepinternal.vip'
+      ApiServerUrl: 'fungame-master.onrender.com',
+      SocketUrl: 'fungame-master.onrender.com',
+      ResourceUrl: 'fungame-master.onrender.com',
+      AviatorUrl: 'fungame-master.onrender.com',
+      DownloadUrl: 'fungame-master.onrender.com'
     }));
   });
 });
@@ -1227,6 +1245,111 @@ function serveAdminDashboard(res) {
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(html);
 }
+
+// --- WEBSOCKET & SIGNALR PROTOCOL HANDLER ---
+function sendWsText(socket, str) {
+  try {
+    const payload = Buffer.from(str, 'utf8');
+    let header;
+    if (payload.length < 126) {
+      header = Buffer.from([0x81, payload.length]);
+    } else if (payload.length < 65536) {
+      header = Buffer.alloc(4);
+      header[0] = 0x81;
+      header[1] = 126;
+      header.writeUInt16BE(payload.length, 2);
+    } else {
+      header = Buffer.alloc(10);
+      header[0] = 0x81;
+      header[1] = 127;
+      header.writeBigUInt64BE(BigInt(payload.length), 2);
+    }
+    socket.write(Buffer.concat([header, payload]));
+  } catch (err) {}
+}
+
+server.on('upgrade', (req, socket, head) => {
+  const upgrade = req.headers['upgrade'];
+  if (!upgrade || upgrade.toLowerCase() !== 'websocket') {
+    socket.destroy();
+    return;
+  }
+  const key = req.headers['sec-websocket-key'];
+  if (!key) {
+    socket.destroy();
+    return;
+  }
+
+  const digest = crypto.createHash('sha1')
+    .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
+    .digest('base64');
+
+  const headers = [
+    'HTTP/1.1 101 Switching Protocols',
+    'Upgrade: websocket',
+    'Connection: Upgrade',
+    `Sec-WebSocket-Accept: ${digest}`
+  ];
+  socket.write(headers.join('\r\n') + '\r\n\r\n');
+
+  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const pKey = (url.searchParams.get('playerKey') || url.searchParams.get('account') || 'gk00000001').toLowerCase();
+  if (db.users[pKey]) {
+    markUserActive(db.users[pKey], req);
+    saveDB(db);
+  }
+
+  socket.on('data', (chunk) => {
+    if (chunk.length < 2) return;
+    const isMasked = (chunk[1] & 0x80) !== 0;
+    let payloadLen = chunk[1] & 0x7f;
+    let offset = 2;
+    if (payloadLen === 126 && chunk.length >= 4) {
+      payloadLen = chunk.readUInt16BE(2);
+      offset = 4;
+    } else if (payloadLen === 127 && chunk.length >= 10) {
+      offset = 10;
+    }
+
+    let payload = Buffer.alloc(0);
+    if (isMasked && chunk.length >= offset + 4) {
+      const mask = chunk.slice(offset, offset + 4);
+      offset += 4;
+      const data = chunk.slice(offset, offset + payloadLen);
+      payload = Buffer.alloc(data.length);
+      for (let i = 0; i < data.length; i++) {
+        payload[i] = data[i] ^ mask[i % 4];
+      }
+    } else {
+      payload = chunk.slice(offset, offset + payloadLen);
+    }
+
+    const text = payload.toString('utf8');
+    // SignalR Handshake ACK
+    if (text.includes('protocol')) {
+      sendWsText(socket, '{}\x1e');
+      sendWsText(socket, '{"type":6}\x1e');
+    } else {
+      sendWsText(socket, '{"type":6}\x1e');
+    }
+
+    if (db.users[pKey]) {
+      markUserActive(db.users[pKey], req);
+    }
+  });
+
+  const pingInterval = setInterval(() => {
+    try {
+      sendWsText(socket, '{"type":6}\x1e');
+      if (db.users[pKey]) markUserActive(db.users[pKey], req);
+    } catch (e) {
+      clearInterval(pingInterval);
+    }
+  }, 10000);
+
+  socket.on('close', () => clearInterval(pingInterval));
+  socket.on('error', () => clearInterval(pingInterval));
+});
 
 // Start Server
 server.listen(PORT, '0.0.0.0', () => {

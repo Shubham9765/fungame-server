@@ -356,12 +356,21 @@ const server = http.createServer((req, res) => {
       if (isHtmlBrowser) {
         return serveAdminDashboard(res);
       }
+      const addressBundle = JSON.stringify({
+        ApiServerUrl: 'funrepinternal.vip',
+        SocketUrl: 'funrepinternal.vip',
+        ResourceUrl: 'funrepinternal.vip'
+      });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({
         status: 'ok',
         code: 200,
         server: 'FunGame Master Authority',
-        encryptedData: 'yTTtA7V5ogvydxU3p8G45ZBPYxVyOqmPr6HoA6Jbu2BDZ+962OxigAdoQAjnL0ZVYs7HbcRqD/G4LDilPAetJ70DVPbShUMqk9B55sW1VwN0bA3Mu82SnmcQ53/IWGnABrxAR4AcoQfQ9GOfxZieSK8KDDB3jeDdQuXHIabD5rfhA466cZtBg7z16YcdUhm9lcMb2CalasvRO2TET8+ShPAPoJueRqWvlzWYSsoc6X5m+JslABstyOybQ/vA7i4u'
+        encryptedData: addressBundle,
+        data: addressBundle,
+        ApiServerUrl: 'funrepinternal.vip',
+        SocketUrl: 'funrepinternal.vip',
+        ResourceUrl: 'funrepinternal.vip'
       }));
     }
 
@@ -578,12 +587,21 @@ const server = http.createServer((req, res) => {
     }
 
     // Default Fallback
+    const fallbackBundle = JSON.stringify({
+      ApiServerUrl: 'funrepinternal.vip',
+      SocketUrl: 'funrepinternal.vip',
+      ResourceUrl: 'funrepinternal.vip'
+    });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status: 'ok',
       code: 200,
       server: 'FunGame Master Authority',
-      encryptedData: 'yTTtA7V5ogvydxU3p8G45ZBPYxVyOqmPr6HoA6Jbu2BDZ+962OxigAdoQAjnL0ZVYs7HbcRqD/G4LDilPAetJ70DVPbShUMqk9B55sW1VwN0bA3Mu82SnmcQ53/IWGnABrxAR4AcoQfQ9GOfxZieSK8KDDB3jeDdQuXHIabD5rfhA466cZtBg7z16YcdUhm9lcMb2CalasvRO2TET8+ShPAPoJueRqWvlzWYSsoc6X5m+JslABstyOybQ/vA7i4u'
+      encryptedData: fallbackBundle,
+      data: fallbackBundle,
+      ApiServerUrl: 'funrepinternal.vip',
+      SocketUrl: 'funrepinternal.vip',
+      ResourceUrl: 'funrepinternal.vip'
     }));
   });
 });

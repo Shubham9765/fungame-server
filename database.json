@@ -9,12 +9,15 @@
     "gk00000001": {
       "playerKey": "gk00000001",
       "username": "GK00000001",
-      "password": "password123",
+      "password": "123456",
       "points": 50000,
       "totalBet": 0,
       "totalWon": 0,
-      "isOnline": false,
-      "createdAt": "2026-10-14T06:00:00.000Z"
+      "isOnline": true,
+      "createdAt": "2026-10-14T06:00:00.000Z",
+      "lastSeen": "2026-10-14T20:11:39.769Z",
+      "lastSeenTimestamp": 1792008699769,
+      "lastIp": "127.0.0.1"
     },
     "guest_001": {
       "playerKey": "guest_001",
@@ -23,7 +26,7 @@
       "totalBet": 0,
       "totalWon": 0,
       "createdAt": "2026-10-13T12:00:00.000Z",
-      "isOnline": true,
+      "isOnline": false,
       "lastSeen": "2026-10-13T17:56:27.796Z",
       "lastSeenTimestamp": 1791914187796,
       "lastIp": "127.0.0.1"
@@ -322,7 +325,7 @@
     "aviator": {
       "roundId": 123,
       "phase": "running",
-      "multiplier": 2.36,
+      "multiplier": 2.48,
       "nextCrashMultiplier": null,
       "countdown": 0,
       "actualCrash": 3.89
@@ -331,25 +334,25 @@
       "roundId": 210,
       "nextWinningNumber": null,
       "lastResult": 9,
-      "countdown": 34
+      "countdown": 33
     },
     "funRoulette": {
       "roundId": 312,
       "nextWinningNumber": null,
       "lastResult": 9,
-      "countdown": 19
+      "countdown": 18
     },
     "sevenUpDown": {
       "roundId": 418,
       "nextDiceTotal": null,
       "lastResult": "7 Down (6)",
-      "countdown": 24
+      "countdown": 23
     },
     "tripleFun": {
       "roundId": 501,
       "nextWinningNumber": null,
       "lastResult": 7,
-      "countdown": 28
+      "countdown": 27
     }
   },
   "adminMasterPoints": 9985000,

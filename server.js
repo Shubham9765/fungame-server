@@ -14,6 +14,21 @@ const DB_PATH = path.join(__dirname, 'database.json');
 const ROULETTE_REDS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 const activePlayerBets = { funTarget: [], funRoulette: [] };
 
+// --- ADMIN SECURITY CONFIGURATION ---
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Itsmenot@9765';
+
+function checkAdminAuth(req) {
+  const authHeader = req.headers['authorization'] || '';
+  if (authHeader.startsWith('Bearer ') && authHeader.slice(7) === ADMIN_PASSWORD) {
+    return true;
+  }
+  const cookieHeader = req.headers['cookie'] || '';
+  if (cookieHeader.includes(`admin_token=${encodeURIComponent(ADMIN_PASSWORD)}`) || cookieHeader.includes(`admin_token=${ADMIN_PASSWORD}`)) {
+    return true;
+  }
+  return false;
+}
+
 // --- DATABASE MANAGEMENT ---
 function initDefaultDB() {
   const defaultPockets = {};
@@ -41,8 +56,8 @@ function initDefaultDB() {
     },
     gameResults: {
       aviator: { roundId: 101, phase: 'waiting', multiplier: 1.0, nextCrashMultiplier: null, countdown: 5 },
-      funTarget: { roundId: 201, nextWinningNumber: null, lastResult: 7, countdown: 35 },
-      funRoulette: { roundId: 301, nextWinningNumber: null, lastResult: 17, countdown: 40 },
+      funTarget: { roundId: 201, nextWinningNumber: null, lastResult: 7, countdown: 60 },
+      funRoulette: { roundId: 301, nextWinningNumber: null, lastResult: 17, countdown: 60 },
       tripleFun: { roundId: 501, nextWinningNumber: null, lastResult: 9, countdown: 45 },
       sevenUpDown: { roundId: 401, nextDiceTotal: null, lastResult: '7 Up (9)', countdown: 30 }
     }
@@ -312,7 +327,7 @@ setInterval(() => {
     activePlayerBets.funTarget = [];
 
     ft.roundId++;
-    ft.countdown = 40;
+    ft.countdown = 60;
     resetBets('funTarget');
     saveDB(db);
   }
@@ -372,7 +387,7 @@ setInterval(() => {
     activePlayerBets.funRoulette = [];
 
     fr.roundId++;
-    fr.countdown = 45;
+    fr.countdown = 60;
     resetBets('funRoulette');
     saveDB(db);
   }
@@ -432,14 +447,100 @@ const server = http.createServer((req, res) => {
       }
     }
 
-    // 1. ADMIN DASHBOARD UI & ROOT CLIENT HANDLER
+    // 0.1 PUBLIC GAME STATE (NO ADMIN SECRETS EXPOSED)
+    if (pathname === '/api/game/state' || pathname === '/api/game/live') {
+      const pKey = (url.searchParams.get('playerKey') || '').toLowerCase().trim();
+      const user = db.users[pKey];
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({
+        status: 'success',
+        gameResults: {
+          funTarget: {
+            roundId: db.gameResults.funTarget.roundId,
+            countdown: db.gameResults.funTarget.countdown,
+            lastResult: db.gameResults.funTarget.lastResult,
+            isLocked: db.gameResults.funTarget.countdown <= 10
+          },
+          funRoulette: {
+            roundId: db.gameResults.funRoulette.roundId,
+            countdown: db.gameResults.funRoulette.countdown,
+            lastResult: db.gameResults.funRoulette.lastResult,
+            isLocked: db.gameResults.funRoulette.countdown <= 10
+          }
+        },
+        player: user ? {
+          playerKey: user.playerKey,
+          username: user.username,
+          points: user.points
+        } : null
+      }));
+    }
+
+    // 0.2 PLAYER LOGIN (STRICT ID & PASSWORD AUTHENTICATION)
+    if (pathname === '/api/player/login' && req.method === 'POST') {
+      const pKey = (jsonBody.playerKey || jsonBody.userId || '').toLowerCase().trim();
+      const pPass = (jsonBody.password || '').trim();
+
+      const user = db.users[pKey];
+      if (!user) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ status: 'error', message: 'Player ID not found. Please contact Admin.' }));
+      }
+
+      if (user.password && user.password !== pPass) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ status: 'error', message: 'Incorrect Password for player ' + pKey }));
+      }
+
+      markUserActive(user, req);
+      saveDB(db);
+
+      const token = 'tok_' + crypto.randomBytes(16).toString('hex');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({
+        status: 'success',
+        playerKey: user.playerKey,
+        username: user.username,
+        points: user.points,
+        token
+      }));
+    }
+
+    // 1. ADMIN AUTHENTICATION GATEWAY
+    if (pathname === '/api/admin/login' && req.method === 'POST') {
+      const { password } = jsonBody;
+      if (password === ADMIN_PASSWORD) {
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Set-Cookie': `admin_token=${ADMIN_PASSWORD}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`
+        });
+        return res.end(JSON.stringify({ status: 'success', token: ADMIN_PASSWORD }));
+      }
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ status: 'error', message: 'Invalid Admin Password' }));
+    }
+
+    if (pathname === '/api/admin/logout') {
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Set-Cookie': `admin_token=; Path=/; HttpOnly; Max-Age=0`
+      });
+      return res.end(JSON.stringify({ status: 'success' }));
+    }
+
+    // ADMIN DASHBOARD VIEW
     if (pathname === '/admin' || pathname === '/admin/') {
+      if (!checkAdminAuth(req)) {
+        return serveAdminLogin(res);
+      }
       return serveAdminDashboard(res);
     }
+
     if (pathname === '/') {
       const isHtmlBrowser = req.headers.accept && req.headers.accept.includes('text/html') && (!req.headers['user-agent'] || !req.headers['user-agent'].includes('Unity'));
       if (isHtmlBrowser) {
         if (url.searchParams.has('admin')) {
+          if (!checkAdminAuth(req)) return serveAdminLogin(res);
           return serveAdminDashboard(res);
         }
         const clientHtmlPath = path.join(__dirname, 'public', 'index.html');
@@ -447,6 +548,7 @@ const server = http.createServer((req, res) => {
           res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
           return res.end(fs.readFileSync(clientHtmlPath, 'utf8'));
         }
+        if (!checkAdminAuth(req)) return serveAdminLogin(res);
         return serveAdminDashboard(res);
       }
       const addressBundle = JSON.stringify({
@@ -469,6 +571,14 @@ const server = http.createServer((req, res) => {
         AviatorUrl: 'fungame-master.onrender.com',
         DownloadUrl: 'fungame-master.onrender.com'
       }));
+    }
+
+    // 1.1 ADMIN API PROTECTION GATE (BLOCKS UNAUTHORIZED TAMPERING)
+    if (pathname.startsWith('/api/admin/')) {
+      if (!checkAdminAuth(req)) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ status: 'error', message: 'Unauthorized: Admin authentication required' }));
+      }
     }
 
     // 2. ADMIN API - DATA & STATS
@@ -530,6 +640,17 @@ const server = http.createServer((req, res) => {
     // 7. PLACE BET (FunTarget, FunRoulette, TripleFun, 7UpDown, Aviator)
     if (pathname === '/api/bet' || pathname.toLowerCase().includes('placebet')) {
       const { playerKey, game, targetNumber, betType, amount } = jsonBody;
+
+      // 7.1 LOCKDOWN ENFORCEMENT: Reject bets during the final 10-second spin phase
+      if (game === 'funTarget' && db.gameResults.funTarget.countdown <= 10) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ status: 'error', message: 'Bets are locked for this round (wheel is spinning)' }));
+      }
+      if (game === 'funRoulette' && db.gameResults.funRoulette.countdown <= 10) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ status: 'error', message: 'Bets are locked for this round (wheel is spinning)' }));
+      }
+
       const user = db.users[playerKey];
       const betAmt = parseInt(amount, 10);
       if (!user || user.points < betAmt) {
@@ -727,6 +848,171 @@ const server = http.createServer((req, res) => {
   });
 });
 
+// --- ADMIN LOGIN GATEWAY HTML ---
+function serveAdminLogin(res) {
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Security Gateway | FunGame Master</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(circle at center, #111827 0%, #030712 100%);
+      color: #f3f4f6;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .card {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 36px 30px;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.8), 0 0 30px rgba(234, 179, 8, 0.15);
+      text-align: center;
+    }
+    .icon {
+      font-size: 46px;
+      margin-bottom: 12px;
+      filter: drop-shadow(0 0 10px rgba(234, 179, 8, 0.5));
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 800;
+      color: #facc15;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    p {
+      color: #94a3b8;
+      font-size: 13px;
+      margin-bottom: 24px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+      text-align: left;
+    }
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: #cbd5e1;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    input {
+      width: 100%;
+      background: #030712;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 15px;
+      padding: 12px 14px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input:focus {
+      border-color: #facc15;
+      box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.2);
+    }
+    .btn {
+      width: 100%;
+      background: linear-gradient(135deg, #eab308 0%, #ca8a04 100%);
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 800;
+      padding: 13px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      transition: transform 0.1s, opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.95; }
+    .btn:active { transform: scale(0.98); }
+    .err-box {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid #ef4444;
+      color: #fca5a5;
+      padding: 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-bottom: 18px;
+      display: none;
+    }
+    .badge {
+      display: inline-block;
+      margin-top: 24px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: rgba(148, 163, 184, 0.1);
+      color: #64748b;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">🛡️</div>
+    <h1>FunGame Master Operations</h1>
+    <p>Restricted Console &bull; Security Password Required</p>
+    
+    <div id="errBox" class="err-box"></div>
+
+    <form id="loginForm" onsubmit="handleAdminLogin(event)">
+      <div class="form-group">
+        <label for="adminPass">Master Password</label>
+        <input type="password" id="adminPass" placeholder="Enter administrative password" required autofocus autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn">Unlock Console</button>
+    </form>
+
+    <div class="badge">SECURED RESTRICTED ENVIRONMENT</div>
+  </div>
+
+  <script>
+    async function handleAdminLogin(e) {
+      e.preventDefault();
+      const pass = document.getElementById('adminPass').value;
+      const errBox = document.getElementById('errBox');
+      errBox.style.display = 'none';
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pass })
+        });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+          sessionStorage.setItem('adminToken', data.token);
+          window.location.reload();
+        } else {
+          errBox.textContent = data.message || 'Access Denied: Invalid Master Password';
+          errBox.style.display = 'block';
+        }
+      } catch (err) {
+        errBox.textContent = 'Server connection error: ' + err.message;
+        errBox.style.display = 'block';
+      }
+    }
+  </script>
+</body>
+</html>`;
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(html);
+}
+
 // --- ADMIN DASHBOARD HTML ---
 function serveAdminDashboard(res) {
   const html = `<!DOCTYPE html>
@@ -832,8 +1118,9 @@ function serveAdminDashboard(res) {
           Players Online: <strong style="color:#3fb950; font-size:14px;" id="valOnlineCount">0</strong> / <span id="valTotalUsers">0</span>
         </div>
       </div>
-      <div>
+      <div style="display:flex; align-items:center; gap:10px;">
         <span class="badge">● SERVER &amp; LIVE WEBSOCKETS ACTIVE</span>
+        <button class="btn btn-danger" onclick="logoutAdmin()" style="padding:4px 10px; font-size:12px;">🔒 Logout</button>
       </div>
     </div>
 
@@ -1083,11 +1370,20 @@ function serveAdminDashboard(res) {
       document.querySelectorAll('.btn-tab').forEach(el => el.classList.remove('active'));
       document.getElementById(tabId).classList.add('active');
       event.target.classList.add('active');
+    function getAdminHeaders() {
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + (sessionStorage.getItem('adminToken') || 'Itsmenot@9765')
+      };
     }
 
     async function loadData() {
       try {
-        const res = await fetch('/api/admin/data');
+        const res = await fetch('/api/admin/data', { headers: getAdminHeaders() });
+        if (res.status === 401) {
+          window.location.reload();
+          return;
+        }
         const data = await res.json();
 
         document.getElementById('valAdminVault').innerText = Number(data.adminVault).toLocaleString();
@@ -1278,7 +1574,7 @@ function serveAdminDashboard(res) {
       if (!playerKey) return alert('Enter player ID');
       const res = await fetch('/api/admin/players/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders(),
         body: JSON.stringify({ playerKey, username: playerKey, password, points })
       });
       const data = await res.json();
@@ -1295,7 +1591,7 @@ function serveAdminDashboard(res) {
       if (!confirm('Recall all ' + totalPoints + ' points from ' + playerKey + ' back to Admin Vault?')) return;
       const res = await fetch('/api/admin/points/recall', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders(),
         body: JSON.stringify({ playerKey })
       });
       const data = await res.json();
@@ -1306,7 +1602,7 @@ function serveAdminDashboard(res) {
     async function quickCredit(playerKey, amt) {
       await fetch('/api/admin/points/transfer', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders(),
         body: JSON.stringify({ senderKey: 'ADMIN', receiverKey: playerKey, amount: amt, note: 'Quick Admin Credit' })
       });
       loadData();
@@ -1319,7 +1615,7 @@ function serveAdminDashboard(res) {
       if (from === to) return alert('Sender and receiver must be different.');
       const res = await fetch('/api/admin/points/transfer', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders(),
         body: JSON.stringify({ senderKey: from, receiverKey: to, amount: amt, note: 'Admin Panel Transfer' })
       });
       const data = await res.json();
@@ -1332,12 +1628,18 @@ function serveAdminDashboard(res) {
       const val = document.getElementById(inputId).value;
       await fetch('/api/admin/set-result', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAdminHeaders(),
         body: JSON.stringify({ game, value: val })
       });
       alert('Next outcome for ' + game + ' set!');
       document.getElementById(inputId).value = '';
       loadData();
+    }
+
+    async function logoutAdmin() {
+      await fetch('/api/admin/logout');
+      sessionStorage.removeItem('adminToken');
+      window.location.reload();
     }
 
     setInterval(loadData, 1500);

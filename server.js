@@ -12,6 +12,7 @@ const DB_PATH = path.join(__dirname, 'database.json');
 
 // --- ROULETTE CONSTANTS ---
 const ROULETTE_REDS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
+const activePlayerBets = { funTarget: [], funRoulette: [] };
 
 // --- DATABASE MANAGEMENT ---
 function initDefaultDB() {
@@ -285,9 +286,35 @@ setInterval(() => {
   if (ft.countdown <= 0) {
     ft.lastResult = ft.nextWinningNumber !== null ? parseInt(ft.nextWinningNumber, 10) : Math.floor(Math.random() * 10);
     ft.nextWinningNumber = null;
+
+    // Resolve Fun Target Payouts
+    const targetBets = activePlayerBets.funTarget || [];
+    for (const b of targetBets) {
+      if (b.targetNumber !== undefined && parseInt(b.targetNumber, 10) === ft.lastResult) {
+        const win = b.amount * 10;
+        const u = db.users[b.playerKey];
+        if (u) {
+          u.points += win;
+          u.totalWon = (u.totalWon || 0) + win;
+          db.transactions.unshift({
+            id: 'win_' + Date.now(),
+            type: 'game_win',
+            sender: 'GAME_VAULT',
+            receiver: b.playerKey,
+            amount: win,
+            balanceAfter: u.points,
+            timestamp: new Date().toISOString(),
+            note: `Fun Target Win: Target ${ft.lastResult} (10x)`
+          });
+        }
+      }
+    }
+    activePlayerBets.funTarget = [];
+
     ft.roundId++;
     ft.countdown = 40;
     resetBets('funTarget');
+    saveDB(db);
   }
 
   // 3. Fun Roulette (0 to 36)
@@ -296,9 +323,58 @@ setInterval(() => {
   if (fr.countdown <= 0) {
     fr.lastResult = fr.nextWinningNumber !== null ? parseInt(fr.nextWinningNumber, 10) : Math.floor(Math.random() * 37);
     fr.nextWinningNumber = null;
+
+    // Resolve Fun Roulette Payouts
+    const rouletteBets = activePlayerBets.funRoulette || [];
+    for (const b of rouletteBets) {
+      let winMultiplier = 0;
+      if (b.targetNumber !== undefined && parseInt(b.targetNumber, 10) === fr.lastResult) {
+        winMultiplier = 36;
+      } else if (b.betType === 'red' && ROULETTE_REDS.has(fr.lastResult)) {
+        winMultiplier = 2;
+      } else if (b.betType === 'black' && fr.lastResult > 0 && !ROULETTE_REDS.has(fr.lastResult)) {
+        winMultiplier = 2;
+      } else if (b.betType === 'even' && fr.lastResult > 0 && fr.lastResult % 2 === 0) {
+        winMultiplier = 2;
+      } else if (b.betType === 'odd' && fr.lastResult % 2 !== 0) {
+        winMultiplier = 2;
+      } else if (b.betType === 'low' && fr.lastResult >= 1 && fr.lastResult <= 18) {
+        winMultiplier = 2;
+      } else if (b.betType === 'high' && fr.lastResult >= 19 && fr.lastResult <= 36) {
+        winMultiplier = 2;
+      } else if (b.betType === 'd1' && fr.lastResult >= 1 && fr.lastResult <= 12) {
+        winMultiplier = 3;
+      } else if (b.betType === 'd2' && fr.lastResult >= 13 && fr.lastResult <= 24) {
+        winMultiplier = 3;
+      } else if (b.betType === 'd3' && fr.lastResult >= 25 && fr.lastResult <= 36) {
+        winMultiplier = 3;
+      }
+
+      if (winMultiplier > 0) {
+        const win = b.amount * winMultiplier;
+        const u = db.users[b.playerKey];
+        if (u) {
+          u.points += win;
+          u.totalWon = (u.totalWon || 0) + win;
+          db.transactions.unshift({
+            id: 'win_' + Date.now(),
+            type: 'game_win',
+            sender: 'GAME_VAULT',
+            receiver: b.playerKey,
+            amount: win,
+            balanceAfter: u.points,
+            timestamp: new Date().toISOString(),
+            note: `Fun Roulette Win: #${fr.lastResult} (${winMultiplier}x)`
+          });
+        }
+      }
+    }
+    activePlayerBets.funRoulette = [];
+
     fr.roundId++;
     fr.countdown = 45;
     resetBets('funRoulette');
+    saveDB(db);
   }
 
   // 4. Triple Fun / FunRep (1 to 12)
@@ -347,6 +423,15 @@ const server = http.createServer((req, res) => {
       if (body && (body.startsWith('{') || body.startsWith('['))) jsonBody = JSON.parse(body);
     } catch (e) {}
 
+    // 0. GAME CLIENT (HTML5 LIVE CASINO: FUN TARGET & FUN ROULETTE)
+    if (pathname === '/play' || pathname === '/game' || pathname === '/play/' || pathname === '/game/') {
+      const clientHtmlPath = path.join(__dirname, 'public', 'index.html');
+      if (fs.existsSync(clientHtmlPath)) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(fs.readFileSync(clientHtmlPath, 'utf8'));
+      }
+    }
+
     // 1. ADMIN DASHBOARD UI & ROOT CLIENT HANDLER
     if (pathname === '/admin' || pathname === '/admin/') {
       return serveAdminDashboard(res);
@@ -354,6 +439,14 @@ const server = http.createServer((req, res) => {
     if (pathname === '/') {
       const isHtmlBrowser = req.headers.accept && req.headers.accept.includes('text/html') && (!req.headers['user-agent'] || !req.headers['user-agent'].includes('Unity'));
       if (isHtmlBrowser) {
+        if (url.searchParams.has('admin')) {
+          return serveAdminDashboard(res);
+        }
+        const clientHtmlPath = path.join(__dirname, 'public', 'index.html');
+        if (fs.existsSync(clientHtmlPath)) {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          return res.end(fs.readFileSync(clientHtmlPath, 'utf8'));
+        }
         return serveAdminDashboard(res);
       }
       const addressBundle = JSON.stringify({
@@ -446,6 +539,16 @@ const server = http.createServer((req, res) => {
       markUserActive(user, req);
       user.points -= betAmt;
       user.totalBet = (user.totalBet || 0) + betAmt;
+
+      // Record individual player bet for payout
+      if (activePlayerBets[game]) {
+        activePlayerBets[game].push({
+          playerKey: user.playerKey,
+          targetNumber,
+          betType,
+          amount: betAmt
+        });
+      }
 
       // Update Live Bets board
       if (game === 'funTarget' && targetNumber !== undefined) {

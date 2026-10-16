@@ -497,6 +497,18 @@
     .quick-hint {
       margin-top: 18px; font-size: 11px; color: #64748b; line-height: 1.5;
     }
+
+    /* LOCATION REQUIREMENT */
+    .loc-status {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.3);
+      border-radius: 8px; padding: 8px 12px; margin-bottom: 16px; font-size: 12px;
+    }
+    .loc-status.error {
+      background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.4); color: #fca5a5;
+    }
+    .loc-status.ok { color: #34d399; }
+    .loc-status .loc-icon { font-size: 16px; }
   </style>
 </head>
 <body>
@@ -507,6 +519,12 @@
       <div class="login-logo">👑</div>
       <h1 class="login-title">FunGame VIP Club</h1>
       <p class="login-sub">Member Sign In &bull; Live Multi-Game Casino</p>
+
+      <!-- LOCATION STATUS (matches funrep.pro requirement) -->
+      <div id="locStatus" class="loc-status error">
+        <span class="loc-icon">📍</span>
+        <span id="locText">Please allow location to continue...</span>
+      </div>
 
       <div id="loginErr" class="login-err"></div>
 
@@ -519,12 +537,13 @@
           <label class="login-label" for="inpPlayerPass">Password</label>
           <input type="password" id="inpPlayerPass" class="login-input" placeholder="e.g. 123456" value="123456" required autocomplete="current-password">
         </div>
-        <button type="submit" class="login-btn">Enter VIP Casino</button>
+        <button type="submit" id="loginBtn" class="login-btn" disabled style="opacity:0.5;">Enter VIP Casino</button>
       </form>
 
       <div class="quick-hint">
         Default Demo Account: <strong>gk00000001</strong> | PIN: <strong>123456</strong><br>
-        Points and credentials are verified live by Server Authority.
+        Points and credentials are verified live by Server Authority.<br>
+        <a href="/results" style="color:#f59e0b; font-size:12px;">📊 View Live Results Board</a>
       </div>
     </div>
   </div>
@@ -575,6 +594,9 @@
     </button>
     <button class="tab-btn" id="tabBtnRoulette" onclick="switchGame('roulette')">
       <span>🎡</span> Fun Roulette (0-36)
+    </button>
+    <button class="tab-btn" id="tabBtnHistory" onclick="openResultsPage()">
+      <span>📊</span> Results History
     </button>
   </div>
 
@@ -878,6 +900,9 @@
       drawTargetWheel(0);
       drawRouletteWheel(0, 0);
 
+      // Geolocation check (mirrors funrep.pro requirement)
+      initGeolocation();
+
       if (currentPlayer) {
         document.getElementById('loginOverlay').style.display = 'none';
         document.getElementById('lblPlayerKey').textContent = currentPlayer;
@@ -887,6 +912,40 @@
         document.getElementById('loginOverlay').style.display = 'flex';
       }
     });
+
+    // --- GEOLOCATION (like funrep.pro — enables login button once allowed) ---
+    let playerGeoPos = null;
+    function initGeolocation() {
+      const locStatus = document.getElementById('locStatus');
+      const locText = document.getElementById('locText');
+      const loginBtn = document.getElementById('loginBtn');
+
+      if (!navigator.geolocation) {
+        locText.textContent = 'Geolocation not supported — login still available.';
+        locStatus.className = 'loc-status ok';
+        if (loginBtn) { loginBtn.disabled = false; loginBtn.style.opacity = '1'; }
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          playerGeoPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          locText.textContent = `Location verified ✔ (${playerGeoPos.lat.toFixed(4)}, ${playerGeoPos.lng.toFixed(4)})`;
+          locStatus.className = 'loc-status ok';
+          if (loginBtn) { loginBtn.disabled = false; loginBtn.style.opacity = '1'; }
+        },
+        () => {
+          locText.textContent = 'Location denied — allowed without location.';
+          locStatus.className = 'loc-status ok';
+          if (loginBtn) { loginBtn.disabled = false; loginBtn.style.opacity = '1'; }
+        },
+        { timeout: 8000 }
+      );
+    }
+
+    // --- OPEN RESULTS PAGE ---
+    function openResultsPage() {
+      window.open('/results', '_blank');
+    }
 
     // --- AUTHENTICATION (PLAYER LOGIN) ---
     async function handlePlayerLogin(e) {
@@ -900,7 +959,12 @@
         const res = await fetch('/api/player/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ playerKey: pKey, password: pPass })
+          body: JSON.stringify({
+            playerKey: pKey,
+            password: pPass,
+            posLat: playerGeoPos ? playerGeoPos.lat : null,
+            posLng: playerGeoPos ? playerGeoPos.lng : null
+          })
         });
         const data = await res.json();
         if (res.ok && data.status === 'success') {
@@ -937,6 +1001,7 @@
       activeGame = game;
       document.getElementById('tabBtnTarget').classList.toggle('active', game === 'target');
       document.getElementById('tabBtnRoulette').classList.toggle('active', game === 'roulette');
+      document.getElementById('tabBtnHistory').classList.remove('active');
       document.getElementById('viewTarget').classList.toggle('active', game === 'target');
       document.getElementById('viewRoulette').classList.toggle('active', game === 'roulette');
       updateTotalBetDisplay();

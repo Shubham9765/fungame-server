@@ -14,6 +14,24 @@ const DB_PATH = path.join(__dirname, 'database.json');
 const ROULETTE_REDS = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 const activePlayerBets = { funTarget: [], funRoulette: [] };
 
+// --- 24-HOUR RESULT HISTORY (in-memory, capped to 24h) ---
+const HISTORY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const resultHistory = {
+  funTarget:   [],   // { roundId, result, timestamp }
+  funRoulette: [],   // { roundId, result, timestamp }
+  tripleFun:   [],
+  sevenUpDown: [],
+  aviator:     []    // { roundId, crashAt, timestamp }
+};
+
+function pushHistory(game, entry) {
+  const now = Date.now();
+  resultHistory[game].unshift({ ...entry, timestamp: new Date().toISOString(), ts: now });
+  // Prune entries older than 24 h
+  const cutoff = now - HISTORY_TTL_MS;
+  resultHistory[game] = resultHistory[game].filter(e => e.ts >= cutoff);
+}
+
 // --- ADMIN SECURITY CONFIGURATION ---
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Itsmenot@9765';
 
@@ -285,6 +303,7 @@ setInterval(() => {
       av.phase = 'crashed';
       av.multiplier = av.actualCrash;
       av.countdown = 6;
+      pushHistory('aviator', { roundId: av.roundId, crashAt: av.actualCrash });
       resetBets('aviator');
     }
   } else if (av.phase === 'crashed') {
@@ -326,6 +345,7 @@ setInterval(() => {
     }
     activePlayerBets.funTarget = [];
 
+    pushHistory('funTarget', { roundId: ft.roundId, result: ft.lastResult });
     ft.roundId++;
     ft.countdown = 60;
     resetBets('funTarget');
@@ -386,6 +406,7 @@ setInterval(() => {
     }
     activePlayerBets.funRoulette = [];
 
+    pushHistory('funRoulette', { roundId: fr.roundId, result: fr.lastResult });
     fr.roundId++;
     fr.countdown = 60;
     resetBets('funRoulette');
@@ -398,6 +419,7 @@ setInterval(() => {
   if (tf.countdown <= 0) {
     tf.lastResult = tf.nextWinningNumber !== null ? parseInt(tf.nextWinningNumber, 10) : (Math.floor(Math.random() * 12) + 1);
     tf.nextWinningNumber = null;
+    pushHistory('tripleFun', { roundId: tf.roundId, result: tf.lastResult });
     tf.roundId++;
     tf.countdown = 45;
     resetBets('tripleFun');
@@ -410,6 +432,7 @@ setInterval(() => {
     let roll = sud.nextDiceTotal !== null ? parseInt(sud.nextDiceTotal, 10) : (Math.floor(1 + Math.random() * 6) + Math.floor(1 + Math.random() * 6));
     sud.lastResult = roll < 7 ? `7 Down (${roll})` : roll > 7 ? `7 Up (${roll})` : `Lucky 7 (${roll})`;
     sud.nextDiceTotal = null;
+    pushHistory('sevenUpDown', { roundId: sud.roundId, result: sud.lastResult });
     sud.roundId++;
     sud.countdown = 30;
     resetBets('sevenUpDown');
@@ -486,6 +509,27 @@ const server = http.createServer((req, res) => {
           points: user.points
         } : null
       }));
+    }
+
+    // 0.15 PUBLIC RESULT HISTORY (last 24h, per game)
+    if (pathname === '/api/history') {
+      const game = url.searchParams.get('game') || '';
+      const limitParam = parseInt(url.searchParams.get('limit') || '200', 10);
+      const allowed = ['funTarget','funRoulette','tripleFun','sevenUpDown','aviator'];
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      if (game && allowed.includes(game)) {
+        return res.end(JSON.stringify({ status: 'success', game, history: resultHistory[game].slice(0, limitParam) }));
+      }
+      // Return all games condensed
+      const all = {};
+      for (const g of allowed) all[g] = resultHistory[g].slice(0, limitParam);
+      return res.end(JSON.stringify({ status: 'success', history: all }));
+    }
+
+    // 0.16 PUBLIC RESULTS PAGE (HTML - mirrors funrep.pro result board)
+    if (pathname === '/results' || pathname === '/results/') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(serveResultsPage());
     }
 
     // 0.2 PLAYER LOGIN (STRICT ID & PASSWORD AUTHENTICATION)
@@ -1661,6 +1705,299 @@ function serveAdminDashboard(res) {
 </html>`;
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(html);
+}
+
+// --- RESULTS PAGE HTML (24-HOUR LIVE RESULT BOARD) ---
+function serveResultsPage() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FunGame Live Results — 24 Hour History</title>
+  <style>
+    :root {
+      --bg: #07090e; --panel: #0d121d; --border: #1e293b;
+      --gold: #f59e0b; --gold-bright: #fbbf24; --red: #dc2626;
+      --black: #111827; --green: #059669; --text: #f1f5f9; --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; min-height: 100vh; }
+    .topbar { background: rgba(13,18,29,0.97); border-bottom: 1px solid var(--border); padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+    .brand { font-size: 20px; font-weight: 900; color: var(--gold-bright); letter-spacing: 1px; text-transform: uppercase; }
+    .nav-links a { color: var(--muted); text-decoration: none; margin-left: 18px; font-size: 13px; font-weight: 700; }
+    .nav-links a:hover { color: #fff; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    h2 { font-size: 16px; text-transform: uppercase; color: var(--gold-bright); margin-bottom: 14px; letter-spacing: 1px; display: flex; align-items: center; gap: 8px; }
+    .section { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 24px; }
+    /* LIVE NOW STRIP */
+    .live-strip { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+    .live-card { background: #0f172a; border: 1px solid var(--border); border-radius: 10px; padding: 12px 18px; min-width: 180px; flex: 1; }
+    .live-card .label { font-size: 10px; text-transform: uppercase; color: var(--muted); letter-spacing: 1px; margin-bottom: 4px; }
+    .live-card .value { font-size: 28px; font-weight: 900; color: #fff; }
+    .live-card .timer { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .live-card.locked .value { color: #f87171; }
+    /* HISTORY TABLE */
+    .hist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .hist-table th { background: #0c1119; color: var(--muted); padding: 8px 12px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .hist-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); }
+    .hist-table tr:last-child td { border-bottom: none; }
+    .badge { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; font-weight: 900; font-size: 13px; }
+    .badge.red { background: #dc2626; color: #fff; }
+    .badge.black { background: #1e293b; color: #fff; border: 1px solid #334155; }
+    .badge.green { background: #059669; color: #fff; }
+    .badge.gold { background: linear-gradient(135deg, #f59e0b, #b45309); color: #fff; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+    .tab-btn { background: #0f172a; border: 1px solid var(--border); color: var(--muted); padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; }
+    .tab-btn.active { border-color: var(--gold); color: #fff; background: #1e293b; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; display: inline-block; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(1.3)} }
+    .round-num { color: var(--muted); font-size: 11px; }
+    .countdown-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 800; }
+    .countdown-badge.betting { background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid #10b981; }
+    .countdown-badge.locked { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid #ef4444; }
+    .empty-msg { color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }
+    @media (max-width: 600px) { .live-card { min-width: 140px; } }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">🎯 FunGame Live Results</div>
+    <div class="nav-links">
+      <a href="/play">▶ Play Now</a>
+      <a href="/results">📊 Results</a>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <!-- LIVE NOW -->
+    <div class="section">
+      <h2><span class="live-dot"></span> Live Now</h2>
+      <div class="live-strip" id="liveStrip">Loading...</div>
+    </div>
+
+    <!-- GAME TABS -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('tab-ft')">🎯 Fun Target</button>
+      <button class="tab-btn" onclick="switchTab('tab-fr')">🎡 Fun Roulette</button>
+      <button class="tab-btn" onclick="switchTab('tab-tf')">🎪 Triple Fun</button>
+      <button class="tab-btn" onclick="switchTab('tab-sud')">🎲 7 Up Down</button>
+      <button class="tab-btn" onclick="switchTab('tab-av')">✈️ Aviator</button>
+    </div>
+
+    <div class="section" style="padding-top:0; border-top:none; border-radius:0 0 12px 12px;">
+      <div style="padding-top:18px;">
+
+        <!-- FUN TARGET -->
+        <div id="tab-ft" class="tab-content active">
+          <h2>🎯 Fun Target — 24hr Result History (0-9)</h2>
+          <table class="hist-table">
+            <thead><tr><th>#</th><th>Round</th><th>Time</th><th>Winning Number</th></tr></thead>
+            <tbody id="histFT"><tr><td colspan="4" class="empty-msg">Loading...</td></tr></tbody>
+          </table>
+        </div>
+
+        <!-- FUN ROULETTE -->
+        <div id="tab-fr" class="tab-content">
+          <h2>🎡 Fun Roulette — 24hr Result History (0-36)</h2>
+          <table class="hist-table">
+            <thead><tr><th>#</th><th>Round</th><th>Time</th><th>Pocket</th><th>Color</th></tr></thead>
+            <tbody id="histFR"><tr><td colspan="5" class="empty-msg">Loading...</td></tr></tbody>
+          </table>
+        </div>
+
+        <!-- TRIPLE FUN -->
+        <div id="tab-tf" class="tab-content">
+          <h2>🎪 Triple Fun — 24hr Result History (1-12)</h2>
+          <table class="hist-table">
+            <thead><tr><th>#</th><th>Round</th><th>Time</th><th>Winning Slot</th></tr></thead>
+            <tbody id="histTF"><tr><td colspan="4" class="empty-msg">Loading...</td></tr></tbody>
+          </table>
+        </div>
+
+        <!-- 7 UP DOWN -->
+        <div id="tab-sud" class="tab-content">
+          <h2>🎲 7 Up Down — 24hr Dice History</h2>
+          <table class="hist-table">
+            <thead><tr><th>#</th><th>Round</th><th>Time</th><th>Result</th></tr></thead>
+            <tbody id="histSUD"><tr><td colspan="4" class="empty-msg">Loading...</td></tr></tbody>
+          </table>
+        </div>
+
+        <!-- AVIATOR -->
+        <div id="tab-av" class="tab-content">
+          <h2>✈️ Aviator — 24hr Crash History</h2>
+          <table class="hist-table">
+            <thead><tr><th>#</th><th>Round</th><th>Time</th><th>Crash At</th></tr></thead>
+            <tbody id="histAV"><tr><td colspan="4" class="empty-msg">Loading...</td></tr></tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const RED_SET = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+
+    function switchTab(id) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      event.target.classList.add('active');
+    }
+
+    function fmtTime(iso) {
+      if (!iso) return '--';
+      const d = new Date(iso);
+      return d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
+    }
+
+    function fmtShortTime(iso) {
+      if (!iso) return '--';
+      return new Date(iso).toLocaleTimeString();
+    }
+
+    async function loadLive() {
+      try {
+        const res = await fetch('/api/game/state?playerKey=');
+        const data = await res.json();
+        const ft = data.gameResults.funTarget;
+        const fr = data.gameResults.funRoulette;
+        const ftColor = ft.lastResult !== null ? 'var(--gold-bright)' : '#fff';
+        const frNum = fr.lastResult;
+        const frColor = frNum === 0 ? '#34d399' : RED_SET.has(frNum) ? '#f87171' : '#94a3b8';
+
+        document.getElementById('liveStrip').innerHTML = \`
+          <div class="live-card \${ft.isLocked ? 'locked' : ''}">
+            <div class="label">🎯 Fun Target</div>
+            <div class="value" style="color:var(--gold-bright);">\${ft.lastResult !== null ? ft.lastResult : '—'}</div>
+            <div class="timer">
+              <span class="countdown-badge \${ft.isLocked ? 'locked' : 'betting'}">\${ft.isLocked ? '🔒 Spinning' : '✅ Betting: ' + ft.countdown + 's'}</span>
+              &nbsp;Round #\${ft.roundId}
+            </div>
+          </div>
+          <div class="live-card \${fr.isLocked ? 'locked' : ''}">
+            <div class="label">🎡 Fun Roulette</div>
+            <div class="value" style="color:\${frColor};">\${fr.lastResult !== null ? fr.lastResult : '—'}</div>
+            <div class="timer">
+              <span class="countdown-badge \${fr.isLocked ? 'locked' : 'betting'}">\${fr.isLocked ? '🔒 Spinning' : '✅ Betting: ' + fr.countdown + 's'}</span>
+              &nbsp;Round #\${fr.roundId}
+            </div>
+          </div>
+        \`;
+      } catch (e) {}
+    }
+
+    async function loadHistory() {
+      try {
+        const res = await fetch('/api/history');
+        const data = await res.json();
+        const h = data.history;
+
+        // FUN TARGET
+        const ftBody = document.getElementById('histFT');
+        if (!h.funTarget || h.funTarget.length === 0) {
+          ftBody.innerHTML = '<tr><td colspan="4" class="empty-msg">No results yet — first round completes in 60s.</td></tr>';
+        } else {
+          ftBody.innerHTML = h.funTarget.map((e, i) => \`
+            <tr>
+              <td class="round-num">\${i + 1}</td>
+              <td>#\${e.roundId}</td>
+              <td>\${fmtTime(e.timestamp)}</td>
+              <td><span class="badge gold">\${e.result}</span></td>
+            </tr>
+          \`).join('');
+        }
+
+        // FUN ROULETTE
+        const frBody = document.getElementById('histFR');
+        if (!h.funRoulette || h.funRoulette.length === 0) {
+          frBody.innerHTML = '<tr><td colspan="5" class="empty-msg">No results yet — first round completes in 60s.</td></tr>';
+        } else {
+          frBody.innerHTML = h.funRoulette.map((e, i) => {
+            const n = e.result;
+            const cls = n === 0 ? 'green' : RED_SET.has(n) ? 'red' : 'black';
+            const colorLabel = n === 0 ? 'GREEN' : RED_SET.has(n) ? 'RED' : 'BLACK';
+            return \`
+              <tr>
+                <td class="round-num">\${i + 1}</td>
+                <td>#\${e.roundId}</td>
+                <td>\${fmtTime(e.timestamp)}</td>
+                <td><span class="badge \${cls}">\${n}</span></td>
+                <td><span style="font-size:11px; font-weight:800; color:\${cls === 'red' ? '#f87171' : cls === 'green' ? '#34d399' : '#94a3b8'};">\${colorLabel}</span></td>
+              </tr>
+            \`;
+          }).join('');
+        }
+
+        // TRIPLE FUN
+        const tfBody = document.getElementById('histTF');
+        if (!h.tripleFun || h.tripleFun.length === 0) {
+          tfBody.innerHTML = '<tr><td colspan="4" class="empty-msg">No results yet — first round completes in 45s.</td></tr>';
+        } else {
+          tfBody.innerHTML = h.tripleFun.map((e, i) => \`
+            <tr>
+              <td class="round-num">\${i + 1}</td>
+              <td>#\${e.roundId}</td>
+              <td>\${fmtTime(e.timestamp)}</td>
+              <td><span class="badge" style="background:#8b5cf6; color:#fff;">#\${e.result}</span></td>
+            </tr>
+          \`).join('');
+        }
+
+        // 7 UP DOWN
+        const sudBody = document.getElementById('histSUD');
+        if (!h.sevenUpDown || h.sevenUpDown.length === 0) {
+          sudBody.innerHTML = '<tr><td colspan="4" class="empty-msg">No results yet — first round completes in 30s.</td></tr>';
+        } else {
+          sudBody.innerHTML = h.sevenUpDown.map((e, i) => {
+            const isUp = e.result.includes('Up');
+            const isLucky = e.result.includes('Lucky');
+            const color = isLucky ? '#fbbf24' : isUp ? '#a78bfa' : '#60a5fa';
+            return \`
+              <tr>
+                <td class="round-num">\${i + 1}</td>
+                <td>#\${e.roundId}</td>
+                <td>\${fmtTime(e.timestamp)}</td>
+                <td><strong style="color:\${color};">\${e.result}</strong></td>
+              </tr>
+            \`;
+          }).join('');
+        }
+
+        // AVIATOR
+        const avBody = document.getElementById('histAV');
+        if (!h.aviator || h.aviator.length === 0) {
+          avBody.innerHTML = '<tr><td colspan="4" class="empty-msg">No results yet — awaiting first crash.</td></tr>';
+        } else {
+          avBody.innerHTML = h.aviator.map((e, i) => {
+            const val = parseFloat(e.crashAt);
+            const color = val < 2 ? '#f87171' : val < 5 ? '#fbbf24' : '#34d399';
+            return \`
+              <tr>
+                <td class="round-num">\${i + 1}</td>
+                <td>#\${e.roundId}</td>
+                <td>\${fmtTime(e.timestamp)}</td>
+                <td><strong style="color:\${color}; font-size:15px;">\${val.toFixed(2)}x 💥</strong></td>
+              </tr>
+            \`;
+          }).join('');
+        }
+
+      } catch (e) { console.error(e); }
+    }
+
+    function refreshAll() { loadLive(); loadHistory(); }
+    setInterval(refreshAll, 3000);
+    refreshAll();
+  </script>
+</body>
+</html>`;
 }
 
 // --- WEBSOCKET & SIGNALR PROTOCOL HANDLER ---
